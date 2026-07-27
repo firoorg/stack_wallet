@@ -392,10 +392,22 @@ class _OpenCryptoPayConfirmViewState
   }
 
   Future<void> _showDesktopSendForm(Widget child) {
-    return showOpenCryptoPayDesktopDialog<void>(context: context, child: child);
+    // Close the OCP picker + confirm dialogs before opening the send form,
+    // otherwise up to four stacked dialog barriers dim the background to
+    // near-black. The send form then sits over the wallet view like a
+    // normal desktop send.
+    final navigator = Navigator.of(context, rootNavigator: true);
+    navigator.pop();
+    navigator.pop();
+    return showOpenCryptoPayDesktopDialog<void>(
+      context: navigator.context,
+      child: child,
+    );
   }
 
   void _warn(String message) {
+    // Some callers reach here after an await.
+    if (!mounted) return;
     unawaited(
       showFloatingFlushBar(
         type: FlushBarType.warning,
@@ -415,7 +427,6 @@ class _OpenCryptoPayConfirmViewState
         paymentDetails: widget.paymentDetails,
         selectedMethod: widget.selectedMethod,
         selectedAsset: widget.selectedAsset,
-        txDetails: _txDetails,
         onRetry: () => unawaited(_fetch()),
         onProceed: () => unawaited(_proceedToSend()),
       ),
@@ -436,7 +447,6 @@ class _OpenCryptoPayConfirmBody extends StatelessWidget {
     required this.paymentDetails,
     required this.selectedMethod,
     required this.selectedAsset,
-    required this.txDetails,
     required this.onRetry,
     required this.onProceed,
   });
@@ -446,7 +456,6 @@ class _OpenCryptoPayConfirmBody extends StatelessWidget {
   final OpenCryptoPayPaymentDetails paymentDetails;
   final OpenCryptoPayTransferMethod selectedMethod;
   final OpenCryptoPayAsset selectedAsset;
-  final OpenCryptoPayTransactionDetails? txDetails;
   final VoidCallback onRetry;
   final VoidCallback onProceed;
 
@@ -468,12 +477,6 @@ class _OpenCryptoPayConfirmBody extends StatelessWidget {
             selectedMethod: selectedMethod,
             selectedAsset: selectedAsset,
           ),
-          if (txDetails?.hint != null) ...[
-            const SizedBox(height: 16),
-            RoundedWhiteContainer(
-              child: Text(txDetails!.hint!, style: STextStyles.label(context)),
-            ),
-          ],
           const SizedBox(height: 24),
           PrimaryButton(label: "Proceed to Send", onPressed: onProceed),
         ],

@@ -264,6 +264,14 @@ class _SendViewState extends ConsumerState<SendView> {
         if (paymentData != null &&
             paymentData.coin?.uriScheme == coin.uriScheme) {
           _applyUri(paymentData);
+        } else if (LnurlUtils.isOpenCryptoPayUrl(content)) {
+          if (mounted) {
+            await Navigator.of(context).pushNamed(
+              OpenCryptoPayView.routeName,
+              arguments: (qrUrl: content, walletId: walletId, coin: coin),
+            );
+          }
+          return;
         } else {
           _setOpReturnData(null);
           if (coin is Epiccash) {
@@ -1517,9 +1525,16 @@ class _SendViewState extends ConsumerState<SendView> {
           fractionDigits: coin.fractionDigits,
         );
 
-        cryptoAmountController.text = ref
-            .read(pAmountFormatter(coin))
-            .format(amount, withUnitName: false);
+        // Full precision rather than the user's max-decimals display pref:
+        // OCP settlement requires the parsed amount to match the quoted
+        // amount exactly, so the prefill must not truncate.
+        final formatter = ref.read(pAmountFormatter(coin));
+        cryptoAmountController.text = AmountFormatter(
+          unit: formatter.unit,
+          locale: formatter.locale,
+          coin: coin,
+          maxDecimals: coin.fractionDigits,
+        ).format(amount, withUnitName: false);
       }
       sendToController.text = _data.contactLabel;
       _address = _data.address.trim();

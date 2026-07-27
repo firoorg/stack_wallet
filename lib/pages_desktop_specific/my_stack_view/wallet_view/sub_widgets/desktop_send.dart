@@ -1066,6 +1066,17 @@ class _DesktopSendState extends ConsumerState<DesktopSend> {
         content = content.substring(0, content.indexOf("\n")).trim();
       }
 
+      if (LnurlUtils.isOpenCryptoPayUrl(content)) {
+        if (!mounted) return;
+        await showOpenCryptoPayPaymentDesktopDialog(
+          context: context,
+          qrUrl: content,
+          walletId: walletId,
+          coin: coin,
+        );
+        return;
+      }
+
       try {
         final paymentData = AddressUtils.parsePaymentUri(
           content,
