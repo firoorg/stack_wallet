@@ -201,8 +201,15 @@ class OpenCryptoPayApi {
   }
 
   Future<Response> _get(Uri uri, {Duration timeout = _httpTimeout}) {
+    // followRedirects: false so a 3xx cannot bounce a request (and the raw
+    // hex/txid it carries) to a host other than the one pinned above.
     return _client
-        .get(url: uri, proxyInfo: _proxyInfo, connectionTimeout: timeout)
+        .get(
+          url: uri,
+          proxyInfo: _proxyInfo,
+          connectionTimeout: timeout,
+          followRedirects: false,
+        )
         .timeout(timeout);
   }
 

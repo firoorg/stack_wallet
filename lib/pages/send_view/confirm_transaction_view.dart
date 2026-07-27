@@ -315,6 +315,61 @@ class _ConfirmTransactionViewState
     }
   }
 
+  /// The transaction has already been broadcast when this runs, so a failed
+  /// provider commit must not fall through to the generic send-failure path:
+  /// the funds are gone either way. Offer retries, then let the normal
+  /// success flow (note saving, form cleanup) continue.
+  Future<void> _commitOpenCryptoPayTxId(
+    OpenCryptoPaySettlement settlement,
+    TxData confirmedTx,
+  ) async {
+    while (true) {
+      try {
+        await settlement.commitTxId(confirmedTx);
+        return;
+      } catch (e, s) {
+        Logging.instance.e(
+          "Open CryptoPay commit failed after broadcast",
+          error: e,
+          stackTrace: s,
+        );
+        if (!mounted) return;
+        final retry = await showDialog<bool>(
+          context: context,
+          builder: (context) => StackDialog(
+            title: "Payment sent, provider not notified",
+            message:
+                "Transaction ${confirmedTx.txid} was broadcast, but "
+                "notifying the Open CryptoPay provider failed. The merchant "
+                "may not see the payment until this succeeds.",
+            leftButton: TextButton(
+              style: Theme.of(context)
+                  .extension<StackColors>()!
+                  .getSecondaryEnabledButtonStyle(context),
+              child: Text(
+                "Skip",
+                style: STextStyles.button(context).copyWith(
+                  color: Theme.of(
+                    context,
+                  ).extension<StackColors>()!.accentColorDark,
+                ),
+              ),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            rightButton: TextButton(
+              style: Theme.of(context)
+                  .extension<StackColors>()!
+                  .getPrimaryEnabledButtonStyle(context),
+              child: Text("Retry", style: STextStyles.button(context)),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ),
+        );
+        if (retry != true) return;
+      }
+    }
+  }
+
   Future<void> _attemptSend(BuildContext context) async {
     final wallet = ref.read(pWallets).getWallet(walletId);
     final coin = wallet.info.coin;
@@ -502,8 +557,7 @@ class _ConfirmTransactionViewState
       }
 
       if (openCryptoPayTxIdFlow) {
-        final result = results.first as TxData;
-        await openCryptoPaySettlement!.commitTxId(result);
+        await _commitOpenCryptoPayTxId(openCryptoPaySettlement!, confirmedTx);
       }
 
       sendProgressController.triggerSuccess?.call();

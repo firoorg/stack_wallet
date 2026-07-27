@@ -61,12 +61,35 @@ void main() {
       );
     });
 
-    test("does not use the Firo fallback for other coins", () {
+    test("falls back for oversized Bitcoin raw hex", () {
       expect(
         OpenCryptoPaySettlement.shouldCommitTxIdFor(
           method: "Bitcoin",
           submissionFlow: OpenCryptoPaySubmissionFlow.rawHexToProvider,
           cryptoCurrency: bitcoin,
+          hasSparkInputs: false,
+          rawHexLength: OpenCryptoPaySettlement.maxRawHexQueryLength,
+        ),
+        false,
+      );
+      expect(
+        OpenCryptoPaySettlement.shouldCommitTxIdFor(
+          method: "Bitcoin",
+          submissionFlow: OpenCryptoPaySubmissionFlow.rawHexToProvider,
+          cryptoCurrency: bitcoin,
+          hasSparkInputs: false,
+          rawHexLength: OpenCryptoPaySettlement.maxRawHexQueryLength + 1,
+        ),
+        true,
+      );
+    });
+
+    test("never falls back for Ethereum raw hex", () {
+      expect(
+        OpenCryptoPaySettlement.shouldCommitTxIdFor(
+          method: "Ethereum",
+          submissionFlow: OpenCryptoPaySubmissionFlow.rawHexToProvider,
+          cryptoCurrency: ethereum,
           hasSparkInputs: false,
           rawHexLength: OpenCryptoPaySettlement.maxRawHexQueryLength + 1,
         ),

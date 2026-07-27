@@ -277,7 +277,12 @@ class OpenCryptoPayCommit {
   bool get canCommitRawHex =>
       submissionFlow == OpenCryptoPaySubmissionFlow.rawHexToProvider;
 
+  /// Raw-hex methods that may fall back to a local broadcast + txid commit
+  /// when the signed hex cannot travel as a GET query parameter. The exact
+  /// fallback conditions live in [OpenCryptoPaySettlement.shouldCommitTxIdFor].
+  static const txIdFallbackMethods = {'Bitcoin', 'Litecoin', 'Firo'};
+
   bool get canCommitTxId =>
       submissionFlow == OpenCryptoPaySubmissionFlow.txIdAfterLocalBroadcast ||
-      method == 'Firo';
+      txIdFallbackMethods.contains(method);
 }

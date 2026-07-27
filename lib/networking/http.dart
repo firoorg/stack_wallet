@@ -27,6 +27,7 @@ class HTTP {
     Map<String, String>? headers,
     required ({InternetAddress host, int port})? proxyInfo,
     Duration? connectionTimeout,
+    bool followRedirects = true,
   }) async {
     final httpClient = HttpClient();
     if (connectionTimeout != null) {
@@ -39,6 +40,7 @@ class HTTP {
         ]);
       }
       final HttpClientRequest request = await httpClient.getUrl(url);
+      request.followRedirects = followRedirects;
 
       if (headers != null) {
         headers.forEach((key, value) => request.headers.add(key, value));

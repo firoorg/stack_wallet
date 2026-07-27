@@ -23,7 +23,7 @@ class OpenCryptoPaySettlement {
     this.tokenWallet,
   });
 
-  // OCP raw-hex commits are GET query params; keep Firo near common header caps.
+  // OCP raw-hex commits are GET query params; stay under common URL caps.
   static const int maxRawHexQueryLength = 8000;
 
   final Wallet wallet;
@@ -51,9 +51,16 @@ class OpenCryptoPaySettlement {
     if (submissionFlow == OpenCryptoPaySubmissionFlow.txIdAfterLocalBroadcast) {
       return true;
     }
-    return method == 'Firo' &&
-        cryptoCurrency is Firo &&
-        (hasSparkInputs || rawHexLength > maxRawHexQueryLength);
+    if (!OpenCryptoPayCommit.txIdFallbackMethods.contains(method)) {
+      return false;
+    }
+    if (cryptoCurrency is Firo) {
+      return hasSparkInputs || rawHexLength > maxRawHexQueryLength;
+    }
+    if (cryptoCurrency is Bitcoin || cryptoCurrency is Litecoin) {
+      return rawHexLength > maxRawHexQueryLength;
+    }
+    return false;
   }
 
   bool get shouldSubmitRawHex => !shouldCommitTxId && commit.canCommitRawHex;
@@ -75,7 +82,8 @@ class OpenCryptoPaySettlement {
         if (shouldCommitTxId) return null;
         if (wallet.cryptoCurrency is! Firo &&
             wallet.cryptoCurrency is! Ethereum &&
-            wallet.cryptoCurrency is! Bitcoin) {
+            wallet.cryptoCurrency is! Bitcoin &&
+            wallet.cryptoCurrency is! Litecoin) {
           return "This Open CryptoPay method is not supported yet";
         }
         if (wallet.cryptoCurrency is Ethereum) {
@@ -141,8 +149,9 @@ class OpenCryptoPaySettlement {
   }
 
   Future<void> commitTxId(TxData txData) async {
-    _ensureQuoteNotExpired();
-
+    // No expiry check here: this only runs after local broadcast, so the
+    // funds have already left the wallet. Attempt the commit even if the
+    // quote just expired — the provider may still accept it.
     try {
       await OpenCryptoPayApi.instance.commitTxId(
         commit: commit,
@@ -259,6 +268,8 @@ class OpenCryptoPaySettlement {
   }) {
     if (minFee <= Decimal.zero) return null;
 
+    // Per the OpenCryptoPay spec (OpenCryptoPay/landingPage README), minFee
+    // is a gas price in wei for EVM chains and sat/vB for Bitcoin-family.
     if (cryptoCurrency is Ethereum) {
       if (gasPrice == null) {
         return "Could not verify Open CryptoPay minimum gas price";

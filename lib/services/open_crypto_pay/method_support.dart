@@ -8,6 +8,7 @@ class OpenCryptoPayMethodSupport {
 
   static const _methodsByCoinType = <Type, String>{
     Bitcoin: 'Bitcoin',
+    Litecoin: 'Litecoin',
     Solana: 'Solana',
     Cardano: 'Cardano',
     Firo: 'Firo',
@@ -24,6 +25,7 @@ class OpenCryptoPayMethodSupport {
         return null;
       case 'Ethereum':
       case 'Bitcoin':
+      case 'Litecoin':
       case 'Firo':
         // Firo starts here for transparent/provider-broadcast payments; Spark
         // or oversized raw transactions fall back to txid at confirmation.
