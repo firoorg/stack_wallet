@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:decimal/decimal.dart';
 import 'package:ethereum_addresses/ethereum_addresses.dart';
@@ -586,6 +587,22 @@ class EthereumWallet extends Bip39Wallet with PrivateKeyInterface {
     }
   }
 
+  /// web3dart's signTransaction returns the bare signed RLP; for EIP-1559
+  /// transactions the raw hex and txid must be computed over the payload
+  /// with the 0x02 type byte prepended (sendTransaction does this itself
+  /// just before broadcasting, so it is only needed here).
+  static ({String raw, String txid}) encodeSignedWeb3Tx(
+    Uint8List signedTx, {
+    required bool isEIP1559,
+  }) {
+    final bytes =
+        isEIP1559 ? web3.prependTransactionType(0x02, signedTx) : signedTx;
+    return (
+      raw: web3.bytesToHex(bytes, include0x: true, padToEvenLength: true),
+      txid: web3.bytesToHex(web3.keccak256(bytes), include0x: true),
+    );
+  }
+
   Future<TxData> signSendWithoutBroadcast({
     required TxData txData,
     TxData Function(TxData txData, String myAddress)? prepareTempTx,
@@ -600,11 +617,17 @@ class EthereumWallet extends Bip39Wallet with PrivateKeyInterface {
       txData.web3dartTransaction!,
       chainId: txData.chainId!.toInt(),
     );
-    final txid = web3.bytesToHex(web3.keccak256(signedTx), include0x: true);
-    final raw = web3.bytesToHex(signedTx, include0x: true);
+    final encoded = encodeSignedWeb3Tx(
+      signedTx,
+      isEIP1559: txData.web3dartTransaction!.isEIP1559,
+    );
 
     return (prepareTempTx ?? _prepareTempTx)(
-      txData.copyWith(raw: raw, txid: txid, txHash: txid),
+      txData.copyWith(
+        raw: encoded.raw,
+        txid: encoded.txid,
+        txHash: encoded.txid,
+      ),
       (await getCurrentReceivingAddress())!.value,
     );
   }
