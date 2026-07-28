@@ -36,7 +36,10 @@ class OpenCryptoPayEvmUri {
     if (pathParts.isEmpty || pathParts.first.isEmpty) return null;
 
     final targetParts = pathParts.first.split('@');
-    final targetAddress = targetParts.first;
+    // EIP-681 allows an optional "pay-" prefix before the target address.
+    final targetAddress = targetParts.first.startsWith('pay-')
+        ? targetParts.first.substring(4)
+        : targetParts.first;
     if (!_isHexAddress(targetAddress)) return null;
 
     if (targetParts.length > 2) return null;

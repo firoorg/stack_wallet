@@ -990,6 +990,15 @@ class _SendViewState extends ConsumerState<SendView> {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     final wallet = ref.read(pWallets).getWallet(walletId);
 
+    // The shared validity/amount providers can be left set by a stacked
+    // send view (e.g. the OCP flow); re-check this view's own state
+    // instead of trusting them.
+    if (ref.read(pSendAmount) == null ||
+        (!isPaynymSend && (_address == null || _address!.isEmpty))) {
+      _setValidAddressProviders(_address);
+      return;
+    }
+
     final Amount amount = ref.read(pSendAmount)!;
     final Amount availableBalance;
     if (isFiro || ref.read(pWalletInfo(walletId)).isMwebEnabled) {
@@ -1518,30 +1527,34 @@ class _SendViewState extends ConsumerState<SendView> {
     cryptoAmountController.addListener(onCryptoAmountChanged);
     baseAmountController.addListener(_baseAmountChanged);
 
-    if (_data != null) {
-      if (_data.amount != null) {
-        final amount = Amount.fromDecimal(
-          _data.amount!,
-          fractionDigits: coin.fractionDigits,
-        );
-
-        // Full precision rather than the user's max-decimals display pref:
-        // OCP settlement requires the parsed amount to match the quoted
-        // amount exactly, so the prefill must not truncate.
-        final formatter = ref.read(pAmountFormatter(coin));
-        cryptoAmountController.text = AmountFormatter(
-          unit: formatter.unit,
-          locale: formatter.locale,
-          coin: coin,
-          maxDecimals: coin.fractionDigits,
-        ).format(amount, withUnitName: false);
-      }
-      sendToController.text = _data.contactLabel;
-      _address = _data.address.trim();
-      noteController.text = _data.note;
+    final data = _data;
+    if (data != null) {
+      sendToController.text = data.contactLabel;
+      _address = data.address.trim();
+      noteController.text = data.note;
       _addressToggleFlag = true;
 
+      // Post-frame: the amount listener writes providers, which must not
+      // happen while the tree is still building.
       WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+        if (!mounted) return;
+        if (data.amount != null) {
+          final amount = Amount.fromDecimal(
+            data.amount!,
+            fractionDigits: coin.fractionDigits,
+          );
+
+          // Full precision rather than the user's max-decimals display pref:
+          // OCP settlement requires the parsed amount to match the quoted
+          // amount exactly, so the prefill must not truncate.
+          final formatter = ref.read(pAmountFormatter(coin));
+          cryptoAmountController.text = AmountFormatter(
+            unit: formatter.unit,
+            locale: formatter.locale,
+            coin: coin,
+            maxDecimals: coin.fractionDigits,
+          ).format(amount, withUnitName: false);
+        }
         _setValidAddressProviders(_address);
       });
     }

@@ -10,6 +10,7 @@ void main() {
   final cardano = Cardano(CryptoCurrencyNetwork.main);
   final ethereum = Ethereum(CryptoCurrencyNetwork.main);
   final firo = Firo(CryptoCurrencyNetwork.main);
+  final litecoin = Litecoin(CryptoCurrencyNetwork.main);
 
   group("shouldCommitTxIdFor", () {
     test("always uses txid for txid submission flows", () {
@@ -61,17 +62,9 @@ void main() {
       );
     });
 
-    test("falls back for oversized Bitcoin raw hex", () {
-      expect(
-        OpenCryptoPaySettlement.shouldCommitTxIdFor(
-          method: "Bitcoin",
-          submissionFlow: OpenCryptoPaySubmissionFlow.rawHexToProvider,
-          cryptoCurrency: bitcoin,
-          hasSparkInputs: false,
-          rawHexLength: OpenCryptoPaySettlement.maxRawHexQueryLength,
-        ),
-        false,
-      );
+    test("does not use the Firo fallback for other coins", () {
+      // Per the OCP spec, only some methods accept `tx=` commits; a failed
+      // oversized-hex commit for these coins must fail before broadcast.
       expect(
         OpenCryptoPaySettlement.shouldCommitTxIdFor(
           method: "Bitcoin",
@@ -80,11 +73,18 @@ void main() {
           hasSparkInputs: false,
           rawHexLength: OpenCryptoPaySettlement.maxRawHexQueryLength + 1,
         ),
-        true,
+        false,
       );
-    });
-
-    test("never falls back for Ethereum raw hex", () {
+      expect(
+        OpenCryptoPaySettlement.shouldCommitTxIdFor(
+          method: "Litecoin",
+          submissionFlow: OpenCryptoPaySubmissionFlow.rawHexToProvider,
+          cryptoCurrency: litecoin,
+          hasSparkInputs: false,
+          rawHexLength: OpenCryptoPaySettlement.maxRawHexQueryLength + 1,
+        ),
+        false,
+      );
       expect(
         OpenCryptoPaySettlement.shouldCommitTxIdFor(
           method: "Ethereum",
@@ -146,6 +146,18 @@ void main() {
           vSize: 3,
         ),
         isNull,
+      );
+    });
+
+    test("enforces sat/vB fee floor for Litecoin", () {
+      expect(
+        OpenCryptoPaySettlement.validateMinFee(
+          cryptoCurrency: litecoin,
+          minFee: Decimal.parse("2.5"),
+          fee: _rawAmount(7),
+          vSize: 3,
+        ),
+        "Open CryptoPay requires at least 2.5 sat/vB fee",
       );
     });
 

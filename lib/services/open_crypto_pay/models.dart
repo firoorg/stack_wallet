@@ -105,11 +105,10 @@ class OpenCryptoPayQuote {
     required this.expiration,
   });
 
-  factory OpenCryptoPayQuote.fromJson(
-    Map<String, dynamic> json, {
-    String? fallbackPaymentId,
-  }) {
-    final paymentId = json['payment'] as String? ?? fallbackPaymentId;
+  factory OpenCryptoPayQuote.fromJson(Map<String, dynamic> json) {
+    // Strict: guessing an id from the callback URL risks committing funds
+    // to a wrong /tx/ endpoint, so fail before any payment starts instead.
+    final paymentId = json['payment'] as String?;
     if (paymentId == null || paymentId.isEmpty) {
       throw Exception('OpenCryptoPay: quote payment id is missing');
     }
@@ -133,7 +132,7 @@ class OpenCryptoPayRequestedAmount {
   factory OpenCryptoPayRequestedAmount.fromJson(Map<String, dynamic> json) {
     return OpenCryptoPayRequestedAmount(
       asset: json['asset'] as String,
-      amount: json['amount'] as num,
+      amount: num.tryParse(json['amount'].toString()) ?? 0,
     );
   }
 }
@@ -177,10 +176,7 @@ class OpenCryptoPayPaymentDetails {
             ),
       quote: json['quote'] == null
           ? null
-          : OpenCryptoPayQuote.fromJson(
-              json['quote'] as Map<String, dynamic>,
-              fallbackPaymentId: _paymentIdFromCallback(callback),
-            ),
+          : OpenCryptoPayQuote.fromJson(json['quote'] as Map<String, dynamic>),
       requestedAmount: json['requestedAmount'] == null
           ? null
           : OpenCryptoPayRequestedAmount.fromJson(
@@ -206,35 +202,19 @@ class OpenCryptoPayPaymentDetails {
       standard == 'OpenCryptoPay' ||
       possibleStandards.contains('OpenCryptoPay') ||
       (callback.isNotEmpty && quote != null && transferAmounts.isNotEmpty);
-
-  static String? _paymentIdFromCallback(String callback) {
-    final segments = Uri.tryParse(callback)?.pathSegments;
-    final cbIndex = segments?.lastIndexOf('cb') ?? -1;
-    if (segments == null || cbIndex == -1 || cbIndex + 1 >= segments.length) {
-      return null;
-    }
-    return segments[cbIndex + 1];
-  }
 }
 
 class OpenCryptoPayTransactionDetails {
   final String? blockchain;
   final String? uri;
-  final String? hint;
   final DateTime? expiryDate;
 
-  OpenCryptoPayTransactionDetails({
-    this.blockchain,
-    this.uri,
-    this.hint,
-    this.expiryDate,
-  });
+  OpenCryptoPayTransactionDetails({this.blockchain, this.uri, this.expiryDate});
 
   factory OpenCryptoPayTransactionDetails.fromJson(Map<String, dynamic> json) {
     return OpenCryptoPayTransactionDetails(
       blockchain: json['blockchain'] as String?,
       uri: json['uri'] as String?,
-      hint: json['hint'] as String?,
       expiryDate: json['expiryDate'] == null
           ? null
           : DateTime.parse(json['expiryDate'] as String),
@@ -278,9 +258,11 @@ class OpenCryptoPayCommit {
       submissionFlow == OpenCryptoPaySubmissionFlow.rawHexToProvider;
 
   /// Raw-hex methods that may fall back to a local broadcast + txid commit
-  /// when the signed hex cannot travel as a GET query parameter. The exact
-  /// fallback conditions live in [OpenCryptoPaySettlement.shouldCommitTxIdFor].
-  static const txIdFallbackMethods = {'Bitcoin', 'Litecoin', 'Firo'};
+  /// when the signed hex cannot travel as a GET query parameter (Spark
+  /// spends). Per the OCP spec only some methods accept `tx=` commits, so
+  /// this is limited to Firo; the exact fallback conditions live in
+  /// OpenCryptoPaySettlement.shouldCommitTxIdFor.
+  static const txIdFallbackMethods = {'Firo'};
 
   bool get canCommitTxId =>
       submissionFlow == OpenCryptoPaySubmissionFlow.txIdAfterLocalBroadcast ||

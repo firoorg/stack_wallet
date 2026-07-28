@@ -440,6 +440,15 @@ class _DesktopSendState extends ConsumerState<DesktopSend> {
       return;
     }
 
+    // The shared validity/amount providers can be left set by another send
+    // form (e.g. a dismissed OCP send dialog); re-check this view's own
+    // state instead of trusting them.
+    if (ref.read(pSendAmount) == null ||
+        (!isPaynymSend && (_address == null || _address!.isEmpty))) {
+      _setValidAddressProviders(_address);
+      return;
+    }
+
     final Amount amount = ref.read(pSendAmount)!;
     final Amount availableBalance;
     if (coin is Firo || ref.read(pWalletInfo(walletId)).isMwebEnabled) {
@@ -1066,17 +1075,6 @@ class _DesktopSendState extends ConsumerState<DesktopSend> {
         content = content.substring(0, content.indexOf("\n")).trim();
       }
 
-      if (LnurlUtils.isOpenCryptoPayUrl(content)) {
-        if (!mounted) return;
-        await showOpenCryptoPayPaymentDesktopDialog(
-          context: context,
-          qrUrl: content,
-          walletId: walletId,
-          coin: coin,
-        );
-        return;
-      }
-
       try {
         final paymentData = AddressUtils.parsePaymentUri(
           content,
@@ -1086,6 +1084,17 @@ class _DesktopSendState extends ConsumerState<DesktopSend> {
             paymentData.coin?.uriScheme == coin.uriScheme) {
           _setOpReturnData(paymentData.additionalParams['op_return']);
           _applyUri(paymentData);
+        } else if (LnurlUtils.isOpenCryptoPayUrl(content)) {
+          // After standard payment URIs so a normal coin URI with a
+          // Lightning fallback still follows the usual flow.
+          if (!mounted) return;
+          await showOpenCryptoPayPaymentDesktopDialog(
+            context: context,
+            qrUrl: content,
+            walletId: walletId,
+            coin: coin,
+          );
+          return;
         } else {
           _setOpReturnData(null);
           if (coin is Epiccash) {
@@ -1267,14 +1276,36 @@ class _DesktopSendState extends ConsumerState<DesktopSend> {
     onCryptoAmountChanged = _cryptoAmountChanged;
     cryptoAmountController.addListener(onCryptoAmountChanged);
 
-    if (_data != null) {
-      if (_data.amount != null) {
-        cryptoAmountController.text = _data.amount!.toString();
-      }
-      sendToController.text = _data.contactLabel;
-      _address = _data.address;
-      _note = _data.note;
-      _addressToggleFlag = true;
+    final data = _data;
+    if (data != null) {
+      // Post-frame: runs after the provider-reset callback above, and
+      // provider writes from the controller listeners must not happen
+      // while the tree is still building.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (data.amount != null) {
+          final amount = Amount.fromDecimal(
+            data.amount!,
+            fractionDigits: coin.fractionDigits,
+          );
+          // Locale-aware and full precision: OCP settlement requires the
+          // parsed amount to match the quoted amount exactly.
+          final formatter = ref.read(pAmountFormatter(coin));
+          cryptoAmountController.text = AmountFormatter(
+            unit: formatter.unit,
+            locale: formatter.locale,
+            coin: coin,
+            maxDecimals: coin.fractionDigits,
+          ).format(amount, withUnitName: false);
+        }
+        sendToController.text = data.contactLabel;
+        _address = data.address;
+        _note = data.note;
+        _setValidAddressProviders(_address);
+        setState(() {
+          _addressToggleFlag = true;
+        });
+      });
     }
 
     if (isPaynymSend) {

@@ -110,6 +110,14 @@ class _DesktopTokenSendState extends ConsumerState<DesktopTokenSend> {
   Future<void> previewSend() async {
     final tokenWallet = ref.read(pCurrentTokenWallet)!;
 
+    // The shared preview-button provider can be left set by another send
+    // form (e.g. a dismissed OCP send dialog); re-check this view's own
+    // state instead of trusting it.
+    if (_amountToSend == null || _address == null || _address!.isEmpty) {
+      _updatePreviewButtonState(_address, _amountToSend);
+      return;
+    }
+
     final Amount amount = _amountToSend!;
     final Amount availableBalance = ref
         .read(
@@ -632,14 +640,37 @@ class _DesktopTokenSendState extends ConsumerState<DesktopTokenSend> {
     onCryptoAmountChanged = _cryptoAmountChanged;
     cryptoAmountController.addListener(onCryptoAmountChanged);
 
-    if (_data != null) {
-      if (_data!.amount != null) {
-        cryptoAmountController.text = _data!.amount!.toString();
-      }
-      sendToController.text = _data!.contactLabel;
-      _address = _data!.address;
-      _note = _data!.note;
-      _addressToggleFlag = true;
+    final data = _data;
+    if (data != null) {
+      // Post-frame: runs after the provider-reset callback above, and
+      // provider writes from the controller listeners must not happen
+      // while the tree is still building.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (data.amount != null) {
+          final tokenContract = ref.read(pCurrentTokenWallet)!.tokenContract;
+          final amount = Amount.fromDecimal(
+            data.amount!,
+            fractionDigits: tokenContract.decimals,
+          );
+          // Locale-aware and full precision: OCP settlement requires the
+          // parsed amount to match the quoted amount exactly.
+          final formatter = ref.read(pAmountFormatter(coin));
+          cryptoAmountController.text = AmountFormatter(
+            unit: formatter.unit,
+            locale: formatter.locale,
+            coin: coin,
+            maxDecimals: tokenContract.decimals,
+          ).format(amount, withUnitName: false, tokenContract: tokenContract);
+        }
+        sendToController.text = data.contactLabel;
+        _address = data.address;
+        _note = data.note;
+        _updatePreviewButtonState(_address, _amountToSend);
+        setState(() {
+          _addressToggleFlag = true;
+        });
+      });
     }
 
     _cryptoFocus.addListener(() {

@@ -168,7 +168,7 @@ class _OpenCryptoPayConfirmViewState
       address: address,
       contactLabel: recipient,
       amount: amount,
-      note: "OpenCryptoPay: $recipient",
+      note: "Open CryptoPay: $recipient",
       openCryptoPayCommit: OpenCryptoPayCommit(
         callbackUrl: widget.paymentDetails.callback,
         quoteId: widget.paymentDetails.quote!.id,

@@ -53,7 +53,6 @@ import '../../wallets/wallet/impl/mimblewimblecoin_wallet.dart';
 import '../../wallets/wallet/impl/solana_wallet.dart';
 import '../../wallets/wallet/wallet_mixin_interfaces/ordinals_interface.dart';
 import '../../wallets/wallet/wallet_mixin_interfaces/paynym_interface.dart';
-import '../../wallets/wallet/wallet.dart';
 import '../../widgets/background.dart';
 import '../../widgets/conditional_parent.dart';
 import '../../widgets/custom_buttons/app_bar_icon_button.dart';
@@ -321,11 +320,11 @@ class _ConfirmTransactionViewState
   /// success flow (note saving, form cleanup) continue.
   Future<void> _commitOpenCryptoPayTxId(
     OpenCryptoPaySettlement settlement,
-    TxData confirmedTx,
+    String txid,
   ) async {
     while (true) {
       try {
-        await settlement.commitTxId(confirmedTx);
+        await settlement.commitTxId(txid);
         return;
       } catch (e, s) {
         Logging.instance.e(
@@ -336,10 +335,12 @@ class _ConfirmTransactionViewState
         if (!mounted) return;
         final retry = await showDialog<bool>(
           context: context,
+          // The choice must be explicit: funds have already been sent.
+          barrierDismissible: false,
           builder: (context) => StackDialog(
             title: "Payment sent, provider not notified",
             message:
-                "Transaction ${confirmedTx.txid} was broadcast, but "
+                "Transaction $txid was broadcast, but "
                 "notifying the Open CryptoPay provider failed. The merchant "
                 "may not see the payment until this succeeds.",
             leftButton: TextButton(
@@ -557,7 +558,7 @@ class _ConfirmTransactionViewState
       }
 
       if (openCryptoPayTxIdFlow) {
-        await _commitOpenCryptoPayTxId(openCryptoPaySettlement!, confirmedTx);
+        await _commitOpenCryptoPayTxId(openCryptoPaySettlement!, txids.first);
       }
 
       sendProgressController.triggerSuccess?.call();
@@ -724,7 +725,7 @@ class _ConfirmTransactionViewState
         return;
       }
     } catch (e, s) {
-      final message = widget.openCryptoPayCommit == null
+      final message = openCryptoPayCommit == null
           ? "Broadcast transaction failed"
           : "Open CryptoPay payment failed";
       Logging.instance.e(message, error: e, stackTrace: s);

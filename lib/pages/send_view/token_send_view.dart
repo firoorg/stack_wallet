@@ -406,6 +406,14 @@ class _TokenSendViewState extends ConsumerState<TokenSendView> {
     final wallet = ref.read(pWallets).getWallet(walletId);
     final tokenWallet = ref.read(pCurrentTokenWallet)!;
 
+    // The shared preview-button provider can be left set by a stacked send
+    // view (e.g. the OCP flow); re-check this view's own state instead of
+    // trusting it.
+    if (_amountToSend == null || _address == null || _address!.isEmpty) {
+      _updatePreviewButtonState(_address, _amountToSend);
+      return;
+    }
+
     final Amount amount = _amountToSend!;
 
     // // confirm send all
@@ -613,13 +621,28 @@ class _TokenSendViewState extends ConsumerState<TokenSendView> {
 
     if (_data != null) {
       if (_data.amount != null) {
-        cryptoAmountController.text = _data.amount!.toString();
+        final amount = Amount.fromDecimal(
+          _data.amount!,
+          fractionDigits: tokenContract.decimals,
+        );
+        // Locale-aware and full precision: OCP settlement requires the
+        // parsed amount to match the quoted amount exactly.
+        final formatter = ref.read(pAmountFormatter(coin));
+        cryptoAmountController.text = AmountFormatter(
+          unit: formatter.unit,
+          locale: formatter.locale,
+          coin: coin,
+          maxDecimals: tokenContract.decimals,
+        ).format(amount, withUnitName: false, tokenContract: tokenContract);
       }
       sendToController.text = _data.contactLabel;
       _address = _data.address.trim();
       noteController.text = _data.note;
       _addressToggleFlag = true;
-      _updatePreviewButtonState(_address, _amountToSend);
+      // Post-frame: provider writes must not happen during build.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _updatePreviewButtonState(_address, _amountToSend),
+      );
     }
 
     super.initState();

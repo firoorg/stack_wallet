@@ -66,27 +66,23 @@ class OpenCryptoPayDesktopFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height - 64,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 32),
-                child: Text(title, style: STextStyles.desktopH3(context)),
-              ),
-              const DesktopDialogCloseButton(),
-            ],
-          ),
-          Flexible(child: child),
-        ],
-      ),
+    // Height is already constrained by the enclosing DesktopDialog.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 32),
+              child: Text(title, style: STextStyles.desktopH3(context)),
+            ),
+            const DesktopDialogCloseButton(),
+          ],
+        ),
+        Flexible(child: child),
+      ],
     );
   }
 }

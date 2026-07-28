@@ -30,29 +30,15 @@ class SendViewAutoFillData {
     this.openCryptoPayCommit,
   });
 
-  Map<String, dynamic> toJson() {
-    final commit = openCryptoPayCommit;
+  @override
+  String toString() {
+    // Deliberately excludes commit details (quote/payment ids) from logs.
     return {
       "address": address,
       "contactLabel": contactLabel,
       "amount": amount,
       "note": note,
-      if (commit != null)
-        "openCryptoPayCommit": {
-          "method": commit.method,
-          "asset": commit.asset,
-          "submissionFlow": commit.submissionFlow.name,
-          "quoteId": commit.quoteId,
-          "paymentId": commit.paymentId,
-          "expiresAt": commit.expiresAt.toIso8601String(),
-          if (commit.tokenDecimals != null)
-            "tokenDecimals": commit.tokenDecimals,
-        },
-    };
-  }
-
-  @override
-  String toString() {
-    return toJson().toString();
+      "hasOpenCryptoPayCommit": openCryptoPayCommit != null,
+    }.toString();
   }
 }

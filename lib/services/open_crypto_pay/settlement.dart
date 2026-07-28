@@ -3,9 +3,7 @@ import 'package:decimal/decimal.dart';
 import '../../db/isar/main_db.dart';
 import '../../models/input.dart';
 import '../../utilities/amount/amount.dart';
-import '../../utilities/logger.dart';
 import '../../wallets/crypto_currency/crypto_currency.dart';
-import '../../wallets/isar/models/spark_coin.dart';
 import '../../wallets/models/tx_data.dart';
 import '../../wallets/wallet/impl/ethereum_wallet.dart';
 import '../../wallets/wallet/impl/sub_wallets/eth_token_wallet.dart';
@@ -51,16 +49,9 @@ class OpenCryptoPaySettlement {
     if (submissionFlow == OpenCryptoPaySubmissionFlow.txIdAfterLocalBroadcast) {
       return true;
     }
-    if (!OpenCryptoPayCommit.txIdFallbackMethods.contains(method)) {
-      return false;
-    }
-    if (cryptoCurrency is Firo) {
-      return hasSparkInputs || rawHexLength > maxRawHexQueryLength;
-    }
-    if (cryptoCurrency is Bitcoin || cryptoCurrency is Litecoin) {
-      return rawHexLength > maxRawHexQueryLength;
-    }
-    return false;
+    return OpenCryptoPayCommit.txIdFallbackMethods.contains(method) &&
+        cryptoCurrency is Firo &&
+        (hasSparkInputs || rawHexLength > maxRawHexQueryLength);
   }
 
   bool get shouldSubmitRawHex => !shouldCommitTxId && commit.canCommitRawHex;
@@ -80,6 +71,11 @@ class OpenCryptoPaySettlement {
         return null;
       case OpenCryptoPaySubmissionFlow.rawHexToProvider:
         if (shouldCommitTxId) return null;
+        if (txData.type.isMweb()) {
+          // An MWEB tx is not standard broadcastable hex for the provider.
+          return "Open CryptoPay is not supported for MWEB sends. "
+              "Please use transparent balance.";
+        }
         if (wallet.cryptoCurrency is! Firo &&
             wallet.cryptoCurrency is! Ethereum &&
             wallet.cryptoCurrency is! Bitcoin &&
@@ -138,36 +134,14 @@ class OpenCryptoPaySettlement {
       await mainDB.putUTXOs(updatedUtxos);
     }
 
-    if (updatedTxData.usedSparkCoins != null &&
-        updatedTxData.usedSparkCoins!.isNotEmpty) {
-      await mainDB.isar.writeTxn(() async {
-        await mainDB.isar.sparkCoins.putAll(updatedTxData.usedSparkCoins!);
-      });
-    }
-
     return await submitWallet.updateSentCachedTxData(txData: updatedTxData);
   }
 
-  Future<void> commitTxId(TxData txData) async {
+  Future<void> commitTxId(String txid) async {
     // No expiry check here: this only runs after local broadcast, so the
     // funds have already left the wallet. Attempt the commit even if the
     // quote just expired — the provider may still accept it.
-    try {
-      await OpenCryptoPayApi.instance.commitTxId(
-        commit: commit,
-        txId: txData.txid!,
-      );
-    } catch (e, s) {
-      Logging.instance.e(
-        "OpenCryptoPay commit failed after local broadcast",
-        error: e,
-        stackTrace: s,
-      );
-      throw Exception(
-        "Open CryptoPay commit failed after broadcasting "
-        "${txData.txid}: $e",
-      );
-    }
+    await OpenCryptoPayApi.instance.commitTxId(commit: commit, txId: txid);
   }
 
   String? _validateTransaction() {
@@ -281,7 +255,9 @@ class OpenCryptoPaySettlement {
       return null;
     }
 
-    if (cryptoCurrency is Bitcoin || cryptoCurrency is Firo) {
+    if (cryptoCurrency is Bitcoin ||
+        cryptoCurrency is Litecoin ||
+        cryptoCurrency is Firo) {
       if (fee == null || vSize == null || vSize <= 0) {
         return "Could not verify Open CryptoPay minimum fee";
       }
